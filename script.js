@@ -3,10 +3,11 @@
 // =============================================
 
 // --- SUPABASE CONFIG ---
+// IMPORTANTE: Substitua com suas credenciais do Supabase
 const SUPABASE_URL = 'https://ktqhqjtfzhkcycpysuwt.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0cWhxanRmemhrY3ljcHlzdXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMDY2NDUsImV4cCI6MjA4ODU4MjY0NX0.Qdbp9tbiAqomGACI6B8xBu8vtlgOGzbebbl7GkhdoNo';
 
-const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- APPLICATION STATE ---
 let state = {
@@ -29,7 +30,7 @@ let realtimeChannel = null;
 // --- SUPABASE DATA FUNCTIONS ---
 
 async function loadCatalogs() {
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('catalogs')
     .select('*')
     .order('created_at', { ascending: true });
@@ -37,14 +38,14 @@ async function loadCatalogs() {
 }
 
 async function loadUsers() {
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('users')
     .select('id, email, name, role, created_at');
   if (!error && data) state.users = data;
 }
 
 async function loadChats() {
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('chats_with_names')
     .select('*')
     .order('last_message_time', { ascending: false });
@@ -62,7 +63,7 @@ async function loadChats() {
 }
 
 async function loadProjects() {
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('projects_with_names')
     .select('*')
     .order('created_at', { ascending: false });
@@ -79,7 +80,7 @@ async function loadProjects() {
 }
 
 async function loadMessagesForChat(chatId) {
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('messages_with_sender')
     .select('*')
     .eq('chat_id', chatId)
@@ -98,7 +99,7 @@ async function loadMessagesForChat(chatId) {
 }
 
 async function sendMessage(chatId, content) {
-  const { error } = await db
+  const { error } = await supabaseClient
     .from('messages')
     .insert({
       chat_id: chatId,
@@ -110,7 +111,7 @@ async function sendMessage(chatId, content) {
 
 async function createChat(catalogId) {
   const catalog = state.catalogs.find(c => c.id === catalogId);
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('chats')
     .insert({
       client_id: state.currentUser.id,
@@ -136,21 +137,12 @@ async function createChat(catalogId) {
   return null;
 }
 
-async function hashPassword(password) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 async function loginUser(email, password) {
-  const hashedPassword = await hashPassword(password);
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('users')
     .select('*')
     .eq('email', email)
-    .eq('password', hashedPassword)
+    .eq('password', password)
     .single();
 
   if (!error && data) {
@@ -164,7 +156,7 @@ async function loginUser(email, password) {
 
 async function registerUser(name, email, password) {
   // Check if email exists
-  const { data: existing } = await db
+  const { data: existing } = await supabaseClient
     .from('users')
     .select('id')
     .eq('email', email)
@@ -174,10 +166,9 @@ async function registerUser(name, email, password) {
     return { success: false, message: 'Este email já está cadastrado' };
   }
 
-  const hashedPassword = await hashPassword(password);
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('users')
-    .insert({ name, email, password: hashedPassword, role: 'client' })
+    .insert({ name, email, password, role: 'client' })
     .select()
     .single();
 
@@ -192,7 +183,7 @@ async function restoreSession() {
   const userId = localStorage.getItem('er_user_id');
   if (!userId) return;
 
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('users')
     .select('*')
     .eq('id', userId)
@@ -210,10 +201,10 @@ async function restoreSession() {
 
 function subscribeToMessages() {
   if (realtimeChannel) {
-    db.removeChannel(realtimeChannel);
+    supabaseClient.removeChannel(realtimeChannel);
   }
 
-  realtimeChannel = db
+  realtimeChannel = supabaseClient
     .channel('messages-realtime')
     .on('postgres_changes',
       { event: 'INSERT', schema: 'public', table: 'messages' },
@@ -229,7 +220,7 @@ function subscribeToMessages() {
           if (newMsg.sender_id === state.currentUser.id) return;
 
           // Fetch sender info
-          const { data: sender } = await db
+          const { data: sender } = await supabaseClient
             .from('users')
             .select('name, role')
             .eq('id', newMsg.sender_id)
@@ -301,7 +292,7 @@ function appendMessageToChat(msg) {
 // --- SUPABASE ADMIN FUNCTIONS ---
 
 async function addCatalogToDb(catalogData) {
-  const { data, error } = await db
+  const { data, error } = await supabaseClient
     .from('catalogs')
     .insert(catalogData)
     .select()
@@ -313,7 +304,7 @@ async function addCatalogToDb(catalogData) {
 }
 
 async function updateCatalogInDb(id, catalogData) {
-  const { error } = await db
+  const { error } = await supabaseClient
     .from('catalogs')
     .update(catalogData)
     .eq('id', id);
@@ -324,7 +315,7 @@ async function updateCatalogInDb(id, catalogData) {
 }
 
 async function deleteCatalogFromDb(id) {
-  const { error } = await db
+  const { error } = await supabaseClient
     .from('catalogs')
     .delete()
     .eq('id', id);
@@ -335,7 +326,7 @@ async function deleteCatalogFromDb(id) {
 }
 
 async function updateChatStatus(chatId, status) {
-  await db
+  await supabaseClient
     .from('chats')
     .update({ status })
     .eq('id', chatId);
@@ -1995,7 +1986,7 @@ function logout() {
   state.currentChat = null;
   localStorage.removeItem('er_user_id');
   if (realtimeChannel) {
-    db.removeChannel(realtimeChannel);
+    supabaseClient.removeChannel(realtimeChannel);
     realtimeChannel = null;
   }
   navigate('home');
